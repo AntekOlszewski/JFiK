@@ -1,0 +1,20 @@
+silnia(n) = 
+{
+	res = 1;
+	while(n > 1){
+		res = res * n;
+		n = n - 1;
+	}
+	return res;
+}
+silniaRec(n) = 
+{
+	res = 1;
+	if(n > 1){
+		res = silnia(n - 1) * n;
+		n = n - 1;
+	}
+	return res;
+}
+x = silniaRec(10);
+x >>;
