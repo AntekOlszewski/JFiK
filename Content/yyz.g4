@@ -1,7 +1,9 @@
 ﻿grammar yyz;
+
 program: functionDefinition* line* EOF;
 print: expression PRINT_OPERATOR;
-line: statement | ifBlock | whileBlock | print;
+read: IDENTIFIER READ_OPERATOR;
+line: statement | ifBlock | whileBlock | print | read;
 statement: (assignment | functionCall) ';';
 ifBlock: IF '(' expression ')' block;
 whileBlock: WHILE '(' expression ')' block;
@@ -38,6 +40,7 @@ ELSE: 'else';
 WHILE: 'while';
 
 PRINT_OPERATOR: '>>';
+READ_OPERATOR: '<<';
 MULTIPLICATIVE_OPERATOR: '*' | '/';
 ADDITIVE_OPERATOR: '+' | '-';
 COMPARE_OPERATOR: '==' | '!=' | '>' | '>=' | '<' | '<=';
@@ -53,6 +56,7 @@ NULL: 'null';
 CONST: 'const';
 TYPED: 'typed';
 GLOBAL: 'global';
+
 
 RETURN: 'return';
 IDENTIFIER: [a-zA-Z][a-zA-Z0-9]*;

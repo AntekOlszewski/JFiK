@@ -12,4 +12,11 @@ var yyzParser = new yyzParser(commonTokenStream);
 var yyzContext = yyzParser.program();
 var visitor = new yyzVisitor();
 
-visitor.Visit(yyzContext);
+try
+{
+    visitor.Visit(yyzContext);
+}
+catch(Exception e)
+{
+    Console.WriteLine(e.Message);
+}

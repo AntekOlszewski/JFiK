@@ -31,7 +31,6 @@ namespace JFiK
             var isConstant = context.CONST() != null;
             var isTyped = context.TYPED() != null;
             var isGlobal = context.GLOBAL() != null;
-            Console.WriteLine($"{variableName} = {value}");
             GetScopeService().SetVariable(variableName, value, isConstant, isTyped, isGlobal);
             return null;
         }
@@ -330,6 +329,23 @@ namespace JFiK
         {
             var value = Visit(context.expression());
             Console.WriteLine(value ?? "null");
+            return null;
+        }
+
+        public override object? VisitRead([NotNull] yyzParser.ReadContext context)
+        {
+            var input = Console.ReadLine();
+            object? result;
+            if(int.TryParse(input, out int resultInt))
+                result = resultInt;
+            else if(double.TryParse(input?.Replace('.', ','), out double resultDouble))
+                result = resultDouble;
+            else if (input == "null")
+                result = null;
+            else
+                result = input;
+            GetScopeService().SetVariable(context.IDENTIFIER().GetText(), result);
+
             return null;
         }
         #endregion

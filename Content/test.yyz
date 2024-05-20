@@ -16,5 +16,7 @@ silniaRec(n) =
 	}
 	return res;
 }
-x = silniaRec(10);
-x >>;
+//x = silniaRec(10);
+
+n <<;
+silnia(n) >>
