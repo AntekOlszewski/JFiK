@@ -2,6 +2,7 @@
 using JFiK.Content;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -10,37 +11,51 @@ namespace JFiK
 {
     public class yyzVisitor : yyzBaseVisitor<object?>
     {
-        ScopeService scopeService;
-        Stack<Function> functionStack = new Stack<Function>();
-        public yyzVisitor()
-        {
-            this.scopeService = new ScopeService();
-        }
-        private ScopeService GetScopeService()
-        {
-            if(functionStack.Count > 0)
-            {
-                return functionStack.Peek().FunctionScopeService;
-            }
-            return scopeService;
-        }
+        Dictionary<string, string> variables = new Dictionary<string, string>();
+        Stack<(string, string)> stack = new Stack<(string, string)>();
+
+
         public override object? VisitAssignment([NotNull] yyzParser.AssignmentContext context)
         {
             var variableName = context.IDENTIFIER().GetText();
-            var value = Visit(context.expression());
-            if(value is int)
-            {
+            Visit(context.expression());
+            var global = context.GLOBAL() != null;
 
+            if (variables.ContainsKey(variableName))
+            {
+                throw new Exception("variable already initialized");
             }
+
+            var value = stack.Pop();
+
+            variables.Add(variableName, value.Item1);
+            LLVMGenerator.Declare(variableName, value.Item1);
+            LLVMGenerator.Assign(variableName, value.Item2, value.Item1, global);
+
             return null;
         }
 
         public override object? VisitConstant([NotNull] yyzParser.ConstantContext context)
         {
             if (context.INTEGER() is { } i)
-                return int.Parse(i.GetText());
+            {
+                var inte = int.Parse(i.GetText());
+                stack.Push(("i32", inte.ToString()));
+                return inte;
+            }
             if (context.DOUBLE() is { } d)
-                return double.Parse(d.GetText().Replace('.', ','));
+            {
+                var doublee = double.Parse(d.GetText(), CultureInfo.InvariantCulture);
+
+                var valueString = doublee.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+                if (!valueString.Contains("."))
+                {
+                    valueString += ".0";
+                }
+
+                stack.Push(("double", valueString));
+                return doublee;
+            }
             if (context.BOOL() is { } b)
                 return b.GetText() == "true";
             if (context.STRING() is { } s)
@@ -53,42 +68,82 @@ namespace JFiK
         public override object? VisitIdentifierExpression([NotNull] yyzParser.IdentifierExpressionContext context)
         {
             var variableName = context.IDENTIFIER().GetText();
+            if (!variables.ContainsKey(variableName))
+            {
+                throw new Exception("variable not exists");
+            }
+
+            var type = variables[variableName];
+
+            if (type == "i32")
+            {
+                stack.Push((type, "%" + LLVMGenerator.loadInt(variableName)));
+            }
+            else if (type == "double")
+            {
+                stack.Push((type, "%" + LLVMGenerator.loadDouble(variableName)));
+            }
+            
+
             return null;
         }
-        //public override object? VisitBracketExpression([NotNull] yyzParser.BracketExpressionContext context)
-        //{
-        //    return Visit(context.expression());
-        //}
-        #region additiveOperations
-        //public override object? VisitAdditiveExpression([NotNull] yyzParser.AdditiveExpressionContext context)
-        //{
-        //    var left = Visit(context.expression(0));
-        //    var right = Visit(context.expression(1));
-        //    var additiveOperator = context.additiveOperation().GetText();
-        //    return additiveOperator switch
-        //    {
-        //        "+" => Add(left, right),
-        //        "-" => Subtract(left, right),
-        //        _ => throw new NotImplementedException("Unnown operator")
-        //    };
-        //}
+        public override object? VisitBracketExpression([NotNull] yyzParser.BracketExpressionContext context)
+        {
+            Visit(context.expression());
 
-        //private object? Add(object? left, object? right)
-        //{
-        //    if(left is null || right is null)
-        //        throw new ArgumentNullException("Cannot preform addition if either of values is null.");
-        //    if (left is double l && right is double r)
-        //        return l + r;
-        //    if (left is int li && right is int ri)
-        //        return li + ri;
-        //    if (left is double lDouble && right is int rInt)
-        //        return lDouble + rInt;
-        //    if (left is int lInt && right is double rDouble)
-        //        return lInt + rDouble;
-        //    if (left is string || right is string)
-        //        return $"{left}{right}";
-        //    throw new NotImplementedException($"Cannot add values of type {left.GetType()} and {right.GetType()}");
-        //}
+            return null;
+        }
+        #region additiveOperations
+        public override object? VisitAdditiveExpression([NotNull] yyzParser.AdditiveExpressionContext context)
+        {
+            Visit(context.expression(0));
+            Visit(context.expression(1));
+
+            var right = stack.Pop();
+            var left = stack.Pop();
+            
+            var additiveOperator = context.additiveOperation().GetText();
+            return additiveOperator switch
+            {
+                "+" => Add(left, right),
+                "-" => Subtract(left, right),
+                _ => throw new NotImplementedException("Unnown operator")
+            };
+        }
+
+        private object? Add((string, string) left, (string, string) right)
+        {
+            if (left.Item1 == "i32" && right.Item1 == "i32")
+            {
+                LLVMGenerator.AddInteger(left.Item2, right.Item2, "i32");
+                stack.Push(("i32", "%" + (LLVMGenerator.reg - 1)));
+                return "i32";
+            }
+            else if (left.Item1 == "double" && right.Item1 == "double")
+            {
+                LLVMGenerator.AddDouble(left.Item2, right.Item2, "double");
+                stack.Push(("double", "%" + (LLVMGenerator.reg - 1)));
+                return "double";
+            }
+            throw new NotImplementedException("Cannot add values of type int and double");
+        }
+
+        private object? Subtract((string, string) left, (string, string) right)
+        {
+            if (left.Item1 == "i32" && right.Item1 == "i32")
+            {
+                LLVMGenerator.SubInteger(left.Item2, right.Item2);
+                stack.Push(("i32", "%" + (LLVMGenerator.reg - 1)));
+                return "i32";
+            }
+            else if (left.Item1 == "double" && right.Item1 == "double")
+            {
+                LLVMGenerator.SubDouble(left.Item2, right.Item2);
+                stack.Push(("double", "%" + (LLVMGenerator.reg - 1)));
+                return "double";
+            }
+            throw new NotImplementedException("Cannot subtract values of type int and double");
+        }
 
         //private object? Subtract(object? left, object? right)
         //{
@@ -106,48 +161,57 @@ namespace JFiK
         //}
         #endregion
         #region multiplicatioveOperations
-        //public override object? VisitMultiplicativeExpression([NotNull] yyzParser.MultiplicativeExpressionContext context)
-        //{
-        //    var left = Visit(context.expression(0));
-        //    var right = Visit(context.expression(1));
-        //    var multiplicativeOperator = context.multiplicativeOperation().GetText();
-        //    return multiplicativeOperator switch
-        //    {
-        //        "*" => Multiply(left, right),
-        //        "/" => Divide(left, right),
-        //        _ => throw new NotImplementedException("Unnown operator")
-        //    };
-        //}
+        public override object? VisitMultiplicativeExpression([NotNull] yyzParser.MultiplicativeExpressionContext context)
+        {
+            Visit(context.expression(0));
+            Visit(context.expression(1));
 
-        //private object? Multiply(object? left, object? right)
-        //{
-        //    if (left is null || right is null)
-        //        throw new ArgumentNullException("Cannot preform multiplication if either of values is null.");
-        //    if (left is double l && right is double r)
-        //        return l * r;
-        //    if (left is int li && right is int ri)
-        //        return li * ri;
-        //    if (left is double lDouble && right is int rInt)
-        //        return lDouble * rInt;
-        //    if (left is int lInt && right is double rDouble)
-        //        return lInt * rDouble;
-        //    throw new NotImplementedException($"Cannot multiply values of type {left.GetType()} and {right.GetType()}");
-        //}
+            var right = stack.Pop();
+            var left = stack.Pop();
 
-        //private object? Divide(object? left, object? right)
-        //{
-        //    if (left is null || right is null)
-        //        throw new ArgumentNullException("Cannot preform division if either of values is null.");
-        //    if (left is double l && right is double r)
-        //        return l / r;
-        //    if (left is int li && right is int ri)
-        //        return li / ri;
-        //    if (left is double lDouble && right is int rInt)
-        //        return lDouble / rInt;
-        //    if (left is int lInt && right is double rDouble)
-        //        return lInt / rDouble;
-        //    throw new NotImplementedException($"Cannot divide values of type {left.GetType()} and {right.GetType()}");
-        //}
+            var multiplicativeOperator = context.multiplicativeOperation().GetText();
+
+            return multiplicativeOperator switch
+            {
+                "*" => Multiply(left, right),
+                "/" => Divide(left, right),
+                _ => throw new NotImplementedException("Unnown operator")
+            };
+        }
+
+        private object? Multiply((string, string) left, (string, string) right)
+        {
+            if (left.Item1 == "i32" && right.Item1 == "i32")
+            {
+                LLVMGenerator.MultInteger(left.Item2, right.Item2);
+                stack.Push(("i32", "%" + (LLVMGenerator.reg - 1)));
+                return "i32";
+            }
+            else if (left.Item1 == "double" && right.Item1 == "double")
+            {
+                LLVMGenerator.MultDouble(left.Item2, right.Item2);
+                stack.Push(("double", "%" + (LLVMGenerator.reg - 1)));
+                return "double";
+            }
+            throw new NotImplementedException("Cannot subtract values of type int and double");
+        }
+
+        private object? Divide((string, string) left, (string, string) right)
+        {
+            if (left.Item1 == "i32" && right.Item1 == "i32")
+            {
+                LLVMGenerator.DivideInteger(left.Item2, right.Item2);
+                stack.Push(("i32", "%" + (LLVMGenerator.reg - 1)));
+                return "i32";
+            }
+            else if (left.Item1 == "double" && right.Item1 == "double")
+            {
+                LLVMGenerator.DivideDouble(left.Item2, right.Item2);
+                stack.Push(("double", "%" + (LLVMGenerator.reg - 1)));
+                return "double";
+            }
+            throw new NotImplementedException("Cannot subtract values of type int and double");
+        }
         #endregion
         #region compareOperations
         //public override object VisitCompareExpression([NotNull] yyzParser.CompareExpressionContext context)
@@ -275,41 +339,41 @@ namespace JFiK
         //}
         #endregion
         #region functions
-        public override object? VisitFunctionDefinition([NotNull] yyzParser.FunctionDefinitionContext context)
-        {
-            var identifiersCount = context.IDENTIFIER().Count();
-            List<string> parameters = new List<string>();
-            for(int i = 1; i < identifiersCount; i++)
-            {
-                parameters.Add(context.IDENTIFIER(i).GetText());
-            }
-            var function = new Function
-            {
-                Identifier = context.IDENTIFIER(0).GetText(),
-                Parameters = parameters,
-                FunctionBody = context.functionBody()
-            };
-            scopeService.SetFunction(function);
-            return null;
-        }
+        //public override object? VisitFunctionDefinition([NotNull] yyzParser.FunctionDefinitionContext context)
+        //{
+        //    var identifiersCount = context.IDENTIFIER().Count();
+        //    List<string> parameters = new List<string>();
+        //    for(int i = 1; i < identifiersCount; i++)
+        //    {
+        //        parameters.Add(context.IDENTIFIER(i).GetText());
+        //    }
+        //    var function = new Function
+        //    {
+        //        Identifier = context.IDENTIFIER(0).GetText(),
+        //        Parameters = parameters,
+        //        FunctionBody = context.functionBody()
+        //    };
+        //    scopeService.SetFunction(function);
+        //    return null;
+        //}
 
-        public override object? VisitFunctionCall([NotNull] yyzParser.FunctionCallContext context)
-        {
-            var parametersCount = context.expression().Count();
-            var identifier = context.IDENTIFIER().GetText();
-            var function = scopeService.GetFunction(identifier, parametersCount);
-            function.FunctionScopeService = new ScopeService(scopeService.GlobalScope);
-            for(int i = 0; i < parametersCount; i++)
-            {
-                var parameterName = function.Parameters[i];
-                var parameterValue = Visit(context.expression(i));
-                function.FunctionScopeService.SetVariable(parameterName, parameterValue);
-            }
-            functionStack.Push(function);
-            var result = Visit(function.FunctionBody);
-            functionStack.Pop();
-            return result;
-        }
+        //public override object? VisitFunctionCall([NotNull] yyzParser.FunctionCallContext context)
+        //{
+        //    var parametersCount = context.expression().Count();
+        //    var identifier = context.IDENTIFIER().GetText();
+        //    var function = scopeService.GetFunction(identifier, parametersCount);
+        //    function.FunctionScopeService = new ScopeService(scopeService.GlobalScope);
+        //    for(int i = 0; i < parametersCount; i++)
+        //    {
+        //        var parameterName = function.Parameters[i];
+        //        var parameterValue = Visit(context.expression(i));
+        //        function.FunctionScopeService.SetVariable(parameterName, parameterValue);
+        //    }
+        //    functionStack.Push(function);
+        //    var result = Visit(function.FunctionBody);
+        //    functionStack.Pop();
+        //    return result;
+        //}
 
         public override object? VisitProgram([NotNull] yyzParser.ProgramContext context)
         {
@@ -320,41 +384,62 @@ namespace JFiK
             return null;
         }
 
-        public override object? VisitFunctionBody([NotNull] yyzParser.FunctionBodyContext context)
-        {
-            foreach(var line in context.line())
-            {
-                Visit(line);
-            }
-            if(context.RETURN() != null)
-            {
-                return Visit(context.expression());
-            }
+        //public override object? VisitFunctionBody([NotNull] yyzParser.FunctionBodyContext context)
+        //{
+        //    foreach(var line in context.line())
+        //    {
+        //        Visit(line);
+        //    }
+        //    if(context.RETURN() != null)
+        //    {
+        //        return Visit(context.expression());
+        //    }
 
-            return null;
-        }
+        //    return null;
+        //}
         #endregion
         #region IO
         public override object? VisitPrint([NotNull] yyzParser.PrintContext context)
         {
-            var value = Visit(context.expression());
-            Console.WriteLine(value ?? "null");
+            var id = context.IDENTIFIER().GetText();
+
+            if (!variables.ContainsKey(id))
+            {
+                throw new Exception("Variable not initialized");
+            }
+            var type = variables[id];
+
+            if (type == "i32")
+            {
+                LLVMGenerator.PrintInteger(id);
+            }
+            else if (type == "double")
+            {
+                LLVMGenerator.PrintDouble(id);
+            }
+
             return null;
         }
 
         public override object? VisitRead([NotNull] yyzParser.ReadContext context)
         {
-            var input = Console.ReadLine();
-            object? result;
-            if(int.TryParse(input, out int resultInt))
-                result = resultInt;
-            else if(double.TryParse(input?.Replace('.', ','), out double resultDouble))
-                result = resultDouble;
-            else if (input == "null")
-                result = null;
-            else
-                result = input;
-            GetScopeService().SetVariable(context.IDENTIFIER().GetText(), result);
+
+            var id = context.IDENTIFIER().GetText();
+            if (!variables.ContainsKey(id))
+            {
+                throw new Exception("Variable not initialized");
+            }
+
+            var type = variables[id];
+
+            if (type == "i32")
+            {
+                LLVMGenerator.ScanInteger(id);
+            }
+            else if (type == "double")
+            {
+                LLVMGenerator.ScanDouble(id);
+            }
 
             return null;
         }
