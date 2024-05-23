@@ -1,4 +1,6 @@
 ﻿grammar yyz;
+
+
 program: line* EOF;
 print: expression PRINT_OPERATOR;
 // program: functionDefinition* line* EOF;
@@ -12,11 +14,11 @@ line: print | read;
 // functionDefinition: IDENTIFIER '(' (IDENTIFIER (',' IDENTIFIER)*)? ')' '=' functionBody;
 // functionBody: '{' line* (RETURN expression)? '}';
 // block: '{' line* '}';
-assignment: GLOBAL? (CONST)? TYPE IDENTIFIER '=' expression;
+assignment: GLOBAL? (CONST)? type IDENTIFIER '=' expression;
 // functionCall: IDENTIFIER '(' (expression (',' expression)*)? ')';
 expression
     : constant                                              #constantExpression   
-    // | IDENTIFIER                                            #identifierExpression
+    | IDENTIFIER                                            #identifierExpression
     // | functionCall                                          #functionCallExpression
     // | '(' expression ')'                                    #bracketExpression
     // | expression multiplicativeOperation expression         #multiplicativeExpression
@@ -25,7 +27,7 @@ expression
     // | negationOperation expression                          #negationExpression
     // | expression booleanOperation expression                #booleanExpression
     ;
-
+    
 // multiplicativeOperation: MULTIPLICATIVE_OPERATOR;
 // additiveOperation: ADDITIVE_OPERATOR;
 // compareOperation: COMPARE_OPERATOR;
@@ -49,9 +51,8 @@ COMPARE_OPERATOR: '==' | '!=' | '>' | '>=' | '<' | '<=';
 NEGATION_OPERATOR: 'NEG';
 BOOL_OPERATOR: 'AND' | 'OR' | 'XOR';
 
-TYPE: INTEGER_TYPE;
+type: INTEGER_TYPE;
 INTEGER_TYPE: 'int';
-
 
 BOOL: 'true' | 'false';
 INTEGER: '-'?[0-9]+;
@@ -61,7 +62,6 @@ NULL: 'null';
 CONST: 'const';
 TYPED: 'typed';
 GLOBAL: 'global';
-
 
 RETURN: 'return';
 IDENTIFIER: [a-zA-Z][a-zA-Z0-9]*;
