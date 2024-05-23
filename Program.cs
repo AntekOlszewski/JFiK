@@ -1,6 +1,7 @@
 ﻿using Antlr4.Runtime;
 using JFiK;
 using JFiK.Content;
+using LLVMSharp.Interop;
 
 var fileName = "Content\\test.yyz";
 var fileContents = File.ReadAllText(fileName);
@@ -12,6 +13,8 @@ var yyzParser = new yyzParser(commonTokenStream);
 var yyzContext = yyzParser.program();
 var visitor = new yyzVisitor();
 
+LLVMGenerator.generateLLVMFile();
+
 try
 {
     visitor.Visit(yyzContext);
@@ -20,3 +23,4 @@ catch(Exception e)
 {
     Console.WriteLine(e.Message);
 }
+

@@ -29,9 +29,9 @@ namespace JFiK
             var variableName = context.IDENTIFIER().GetText();
             var value = Visit(context.expression());
             var isConstant = context.CONST() != null;
-            var isTyped = context.TYPED() != null;
+            // var isTyped = context.TYPED() != null;
             var isGlobal = context.GLOBAL() != null;
-            GetScopeService().SetVariable(variableName, value, isConstant, isTyped, isGlobal);
+            //GetScopeService().SetVariable(variableName, value, isConstant, isTyped, isGlobal);
             return null;
         }
 
@@ -308,6 +308,15 @@ namespace JFiK
             var result = Visit(function.FunctionBody);
             functionStack.Pop();
             return result;
+        }
+
+        public override object? VisitProgram([NotNull] yyzParser.ProgramContext context)
+        {
+            base.VisitProgram(context);
+
+            LLVMGenerator.CloseMain();
+
+            return null;
         }
 
         public override object? VisitFunctionBody([NotNull] yyzParser.FunctionBodyContext context)
