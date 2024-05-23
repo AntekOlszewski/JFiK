@@ -52,7 +52,7 @@ namespace JFiK
 
         public override object? VisitIdentifierExpression([NotNull] yyzParser.IdentifierExpressionContext context)
         {
-            base.VisitIdentifierExpression(context);
+            var variableName = context.IDENTIFIER().GetText();
             return null;
         }
         //public override object? VisitBracketExpression([NotNull] yyzParser.BracketExpressionContext context)
