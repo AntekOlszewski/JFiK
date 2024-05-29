@@ -1,4 +1,5 @@
-﻿using LLVMSharp;
+﻿using Antlr4.Runtime.Misc;
+using LLVMSharp;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -51,6 +52,23 @@ namespace JFiK
             reg++;
         }
 
+        public static void PrintBoolean(string id)
+        {
+            buffer += "%" + reg + " = load i1, i1* %" + id + "\n";
+            reg++;
+            buffer += "%" + reg + " = getelementptr inbounds [5 x i8], [5 x i8]* @str_true, i32 0, i32 0\n";
+            reg++;
+            buffer += "%" + reg + " = getelementptr inbounds [6 x i8], [6 x i8]* @str_false, i32 0, i32 0\n";
+            reg++;
+            buffer += "%" + reg + " = select i1 %" + (reg - 3) + ", i8* %" + (reg - 2) + ", i8* %" + (reg - 1) + "\n";
+            reg++;
+            buffer += "%" + reg + " = getelementptr inbounds [3 x i8], [3 x i8]* @str_fmt, i32 0, i32 0\n";
+            reg++;
+            buffer += "call i32 (i8*, ...) @printf(i8* %" + (reg - 1) + ", i8* %" + (reg - 2) + ")\n";
+            reg++;
+
+        }
+
         public static void CloseMain()
         {
             mainText += buffer;
@@ -66,6 +84,20 @@ namespace JFiK
         public static void ScanDouble(string id)
         {
             buffer += "%" + reg + " = call i32 (i8*, ...) @__isoc99_scanf(i8* getelementptr inbounds ([4 x i8], [4 x i8]* @strsd, i32 0, i32 0), double* %" + id + ")\n";
+            reg++;
+        }
+
+        public static void ScanBoolean(string id)
+        {
+            buffer += "%" + reg + " = alloca i32, align 4\n";
+            reg++;
+            buffer += "%" + reg + " = getelementptr inbounds[3 x i8], [3 x i8] * @str_bool, i32 0, i32 0\n";
+            reg++; 
+            buffer += "% call = call i32(i8 *, ...) @__isoc99_scanf(i8 * % format_str, i32 * % " + reg + ")\n";
+            reg++;
+            buffer += "%int_loaded = load i32, i32* %" + (reg - 1) + ", align 4\n";
+            reg++;
+            buffer += "%" + id + " = icmp ne i32 %" + (reg - 1) + ", 0\n";
             reg++;
         }
 
@@ -131,6 +163,16 @@ namespace JFiK
             reg++;
         }
 
+        public static void compareVariables(string var1, string var2, string cond, string type)
+        {
+            buffer += "%" + reg + " = load " + type + ", " + type + "* " + var1 + "\n";
+            reg++;
+            buffer += "%" + reg + " = load " + type + ", " + type + "* " + var2 + "\n";
+            reg++;
+            buffer += "%" + reg + " = icmp " + cond + " " + type + " %" + (reg - 2) + ", %" + (reg - 1) + "\n";
+            reg++;
+        }
+
 
 
 
@@ -147,6 +189,10 @@ namespace JFiK
             result += "@strd = constant [4 x i8] c\"%lf\\00\"\n";
             result += "@strl = constant [6 x i8] c\"%lld\\0A\\00\"\n";
             result += "@strsd = constant [4 x i8] c\"%lf\\00\"\n";
+            result += "@str_bool = private unnamed_addr constant [3 x i8] c\"%d\\00\", align 1\n";
+            result += "@str_true = private unnamed_addr constant [5 x i8] c\"true\\00\", align 1\r\n";
+            result += "@str_false = private unnamed_addr constant [6 x i8] c\"false\\00\", align 1\n";
+            result += "@str_fmt = private unnamed_addr constant [3 x i8] c\"%s\\00\", align 1\n";
 
             result += header;
             result += "define i32 @main() nounwind{\n";

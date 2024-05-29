@@ -10,10 +10,10 @@ line: print | read | assignment ';';
 // line: statement | ifBlock | whileBlock | print | read;
 // statement: (assignment | functionCall) ';';
 // ifBlock: IF '(' expression ')' block;
-// whileBlock: WHILE '(' expression ')' block;
+whileBlock: WHILE '(' expression ')' block;
 // functionDefinition: IDENTIFIER '(' (IDENTIFIER (',' IDENTIFIER)*)? ')' '=' functionBody;
 // functionBody: '{' line* (RETURN expression)? '}';
-// block: '{' line* '}';
+block: '{' line* '}';
 assignment: GLOBAL? (CONST)? LET IDENTIFIER '=' expression ;
 // functionCall: IDENTIFIER '(' (expression (',' expression)*)? ')';
 expression
@@ -23,14 +23,14 @@ expression
     | '(' expression ')'                                    #bracketExpression
     | expression multiplicativeOperation expression         #multiplicativeExpression
     | expression additiveOperation expression               #additiveExpression 
-    // | expression compareOperation expression                #compareExpression
+    | expression compareOperation expression                #compareExpression
     // | negationOperation expression                          #negationExpression
     // | expression booleanOperation expression                #booleanExpression
     ;
     
 multiplicativeOperation: MULTIPLICATIVE_OPERATOR;
 additiveOperation: ADDITIVE_OPERATOR;
-// compareOperation: COMPARE_OPERATOR;
+compareOperation: COMPARE_OPERATOR;
 // booleanOperation: BOOL_OPERATOR;
 // negationOperation: NEGATION_OPERATOR;
 
@@ -41,7 +41,7 @@ NL: '\r'? '\n' | '\r';
 // WS: [ \t\r\n]+ -> skip;
 // IF: 'if';
 // ELSE: 'else';
-// WHILE: 'while';
+WHILE: 'while';
 
 PRINT_OPERATOR: '>>';
 READ_OPERATOR: '<<';

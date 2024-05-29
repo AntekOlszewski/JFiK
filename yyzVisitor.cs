@@ -13,6 +13,7 @@ namespace JFiK
     {
         Dictionary<string, string> variables = new Dictionary<string, string>();
         Stack<(string, string)> stack = new Stack<(string, string)>();
+        Boolean isGlobal;
 
 
         public override object? VisitAssignment([NotNull] yyzParser.AssignmentContext context)
@@ -57,7 +58,11 @@ namespace JFiK
                 return doublee;
             }
             if (context.BOOL() is { } b)
-                return b.GetText() == "true";
+            {
+                var booleane = b.GetText() == "true" ? 1 : 0;
+                stack.Push(("i1", booleane.ToString()));
+                return booleane;
+            }
             if (context.STRING() is { } s)
                 return s.GetText()[1..^1];
             if (context.NULL() is { } n)
@@ -214,37 +219,44 @@ namespace JFiK
         }
         #endregion
         #region compareOperations
-        //public override object VisitCompareExpression([NotNull] yyzParser.CompareExpressionContext context)
-        //{
-        //    var left = Visit(context.expression(0));
-        //    var right = Visit(context.expression(1));
-        //    var compareOperator = context.compareOperation().GetText();
-        //    return compareOperator switch
-        //    {
-        //        "==" => EqualTo(left, right),
-        //        "!=" => !EqualTo(left, right),
-        //        ">" => GreaterThan(left, right),
-        //        "<" => GreaterThan(right, left),
-        //        ">=" => EqualTo(left, right) || GreaterThan(left, right),
-        //        "<=" => EqualTo(left, right) || GreaterThan(right, left),
-        //        _ => throw new NotImplementedException("Unnown operator")
-        //    };
-        //}
+        public override object? VisitCompareExpression([NotNull] yyzParser.CompareExpressionContext context)
+        {
+            Visit(context.expression(0));
+            Visit(context.expression(1));
 
-        //private bool EqualTo(object? left, object? right)
-        //{
-        //    if (left is null || right is null)
-        //        throw new ArgumentNullException("Cannot preform comparison if either of values is null.");
-        //    if (left is double l && right is double r)
-        //        return l == r;
-        //    if (left is int li && right is int ri)
-        //        return li == ri;
-        //    if (left is double lDouble && right is int rInt)
-        //        return lDouble == rInt;
-        //    if (left is int lInt && right is double rDouble)
-        //        return lInt == rDouble;
-        //    throw new NotImplementedException($"Cannot compare values of type {left.GetType()} and {right.GetType()}");
-        //}
+            string operation = context.compareOperation().COMPARE_OPERATOR().GetText();
+
+            var left = stack.Pop();
+            var right = stack.Pop();
+
+            if (left.Item1 == right.Item1)
+            {
+                string operationText;
+                switch (operation)
+                {
+                    case "==":
+                        operationText = "eq";
+                        break;
+                    default:
+                        throw new NotImplementedException("Operation not found");
+                };
+
+                if (left.Item1 == "i32")
+                {
+                    LLVMGenerator.compareVariables(left.Item2, right.Item2, operationText, "i32");
+                }
+                else if (left.Item1 == "double")
+                {
+                    LLVMGenerator.compareVariables(left.Item2, right.Item2, operationText, "double");
+                }
+            }
+            else
+            {
+                throw new NotImplementedException("Could not compare different types");
+            }
+
+            return null;
+        }
 
         //private bool GreaterThan(object? left, object? right)
         //{
@@ -329,14 +341,14 @@ namespace JFiK
         //    return null;
         //}
 
-        //public override object? VisitWhileBlock([NotNull] yyzParser.WhileBlockContext context)
-        //{
-        //    while (IsTrue(Visit(context.expression())))
-        //    {
-        //        Visit(context.block());
-        //    }
-        //    return null;
-        //}
+        public override object? VisitWhileBlock([NotNull] yyzParser.WhileBlockContext context)
+        {
+            //while (IsTrue(Visit(context.expression())))
+            //{
+            //    Visit(context.block());
+            //}
+            return null;
+        }
         #endregion
         #region functions
         //public override object? VisitFunctionDefinition([NotNull] yyzParser.FunctionDefinitionContext context)
@@ -377,6 +389,8 @@ namespace JFiK
 
         public override object? VisitProgram([NotNull] yyzParser.ProgramContext context)
         {
+            isGlobal = true;
+
             base.VisitProgram(context);
 
             LLVMGenerator.CloseMain();
@@ -417,6 +431,10 @@ namespace JFiK
             {
                 LLVMGenerator.PrintDouble(id);
             }
+            else if (type == "i1")
+            {
+                LLVMGenerator.PrintBoolean(id);
+            }
 
             return null;
         }
@@ -439,6 +457,10 @@ namespace JFiK
             else if (type == "double")
             {
                 LLVMGenerator.ScanDouble(id);
+            }
+            else if (type == "i1")
+            {
+                LLVMGenerator.ScanBoolean(id);
             }
 
             return null;
