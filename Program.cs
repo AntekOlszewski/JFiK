@@ -13,13 +13,13 @@ var yyzParser = new yyzParser(commonTokenStream);
 var yyzContext = yyzParser.program();
 var visitor = new yyzVisitor();
 
-try
-{
+//try
+//{
     visitor.Visit(yyzContext);
     LLVMGenerator.generateLLVMFile();
-}
-catch(Exception e)
-{
-    Console.WriteLine(e.Message);
-}
+//}
+//catch(Exception e)
+//{
+//    Console.WriteLine(e.Message);
+//}
 

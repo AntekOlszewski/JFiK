@@ -7,6 +7,7 @@ using System.Reflection.PortableExecutable;
 using System.Text;
 using System.Threading.Tasks;
 using static System.Net.Mime.MediaTypeNames;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace JFiK
 {
@@ -17,28 +18,31 @@ namespace JFiK
         public static int reg = 1;
         static int br = 0;
         static string buffer = "";
+        static int functionCounter = 0;
 
         static Stack<int> brstack = new Stack<int>();
+        static Stack<int> mainTmpStack = new Stack<int>();
 
-        public static void Assign(string id, string value, string type, bool global)
+        public static void Assign(string id, string value, string type, bool isGlobal)
         {
-            buffer += "store " + type + " " + value + ", " + type + "* %" + id + "\n";
+            buffer += "store " + type + " " + value + ", " + type + "* " + (isGlobal ? "@" : "%") + id + "\n";
         }
 
-        public static void Declare(string id, string type)
+        public static void Declare(string id, string type, bool global)
         {
-        //if (global)
-        //{
-        //    header += "store " + type + " " + value + ", " + type + "* @" + id + "\n";
-        //}
-        //else
-        //{
-            buffer += "%" + id + " = alloca " + type + "\n";
+            if (global)
+            {
+                header += "@" + id + " = global " + type + " 0\n";
+            }
+            else
+            {
+                buffer += "%" + id + " = alloca " + type + "\n";
+            }
         }
 
         public static void PrintInteger(string id)
         {
-            buffer += "%" + reg + " = load i32, i32* %" + id + "\n";
+            buffer += "%" + reg + " = load i32, i32* " + id + "\n";
             reg++;
             buffer += "%" + reg + " = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([4 x i8], [4 x i8]* @strp, i32 0, i32 0), i32 %" + (reg - 1) + ")\n";
             reg++;
@@ -46,7 +50,7 @@ namespace JFiK
 
         public static void PrintDouble(string id)
         {
-            buffer += "%" + reg + " = load double, double* %" + id + "\n";
+            buffer += "%" + reg + " = load double, double* " + id + "\n";
             reg++;
             buffer += "%" + reg + " = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([4 x i8], [4 x i8]* @strpd, i32 0, i32 0), double %" + (reg - 1) + ")\n";
             reg++;
@@ -54,7 +58,7 @@ namespace JFiK
 
         public static void PrintBoolean(string id)
         {
-            buffer += "%" + reg + " = load i1, i1* %" + id + "\n";
+            buffer += "%" + reg + " = load i1, i1* " + id + "\n";
             reg++;
             buffer += "%" + reg + " = getelementptr inbounds [5 x i8], [5 x i8]* @str_true, i32 0, i32 0\n";
             reg++;
@@ -62,7 +66,7 @@ namespace JFiK
             reg++;
             buffer += "%" + reg + " = select i1 %" + (reg - 3) + ", i8* %" + (reg - 2) + ", i8* %" + (reg - 1) + "\n";
             reg++;
-            buffer += "%" + reg + " = getelementptr inbounds [3 x i8], [3 x i8]* @str_fmt, i32 0, i32 0\n";
+            buffer += "%" + reg + " = getelementptr inbounds [4 x i8], [4 x i8]* @str_fmt, i32 0, i32 0\n";
             reg++;
             buffer += "call i32 (i8*, ...) @printf(i8* %" + (reg - 1) + ", i8* %" + (reg - 2) + ")\n";
             reg++;
@@ -77,13 +81,13 @@ namespace JFiK
 
         public static void ScanInteger(string id)
         {
-            buffer += "%" + reg + " = call i32 (i8*, ...) @__isoc99_scanf(i8* getelementptr inbounds ([3 x i8], [3 x i8]* @strs, i32 0, i32 0), i32* %" + id + ")\n";
+            buffer += "%" + reg + " = call i32 (i8*, ...) @__isoc99_scanf(i8* getelementptr inbounds ([3 x i8], [3 x i8]* @strs, i32 0, i32 0), i32* " + id + ")\n";
             reg++;
         }
 
         public static void ScanDouble(string id)
         {
-            buffer += "%" + reg + " = call i32 (i8*, ...) @__isoc99_scanf(i8* getelementptr inbounds ([4 x i8], [4 x i8]* @strsd, i32 0, i32 0), double* %" + id + ")\n";
+            buffer += "%" + reg + " = call i32 (i8*, ...) @__isoc99_scanf(i8* getelementptr inbounds ([4 x i8], [4 x i8]* @strsd, i32 0, i32 0), double* " + id + ")\n";
             reg++;
         }
 
@@ -97,7 +101,7 @@ namespace JFiK
             reg++;
             buffer += "%int_loaded = load i32, i32* %" + (reg - 1) + ", align 4\n";
             reg++;
-            buffer += "%" + id + " = icmp ne i32 %" + (reg - 1) + ", 0\n";
+            buffer += id + " = icmp ne i32 %" + (reg - 1) + ", 0\n";
             reg++;
         }
 
@@ -165,17 +169,127 @@ namespace JFiK
 
         public static void compareVariables(string var1, string var2, string cond, string type)
         {
-            buffer += "%" + reg + " = load " + type + ", " + type + "* " + var1 + "\n";
-            reg++;
-            buffer += "%" + reg + " = load " + type + ", " + type + "* " + var2 + "\n";
-            reg++;
-            buffer += "%" + reg + " = icmp " + cond + " " + type + " %" + (reg - 2) + ", %" + (reg - 1) + "\n";
+            //buffer += "%" + reg + " = load " + type + ", " + type + "* " + var1 + "\n";
+            //reg++;
+            //buffer += "%" + reg + " = load " + type + ", " + type + "* " + var2 + "\n";
+            //reg++;
+            buffer += "%" + reg + " = icmp " + cond + " " + type + " " + var1 + ", " + var2 + "\n";
             reg++;
         }
 
+        public static void beginIfStatement()
+        {
+            br++;
+            buffer += "br i1 %" + (reg - 1) + ", label %true" + br + ", label %false" + br + "\n";
+            buffer += "true" + br + ":\n";
+            brstack.Push(br);
+        }
+
+        public static void beginElseStatement()
+        {
+            int b = brstack.Pop();
+            buffer += "br label %end" + b + "\n";
+            buffer += "false" + b + ":\n";
+            brstack.Push(b);
+        }
+
+        public static void endElse()
+        {
+            int b = brstack.Pop();
+            buffer += "br label %end" + b + "\n";
+            buffer += "end" + b + ":\n";
+        }
+
+        public static void beginWhile()
+        {
+            br++;
+            buffer += "br label %cond" + br + "\n";
+            buffer += "cond" + br + ":\n";
+        }
+
+        public static void whileBlock()
+        {
+            buffer += "br i1 %" + (reg - 1) + ", label %true" + br + ", label %false" + br + "\n";
+            buffer += "true" + br + ":\n";
+            brstack.Push(br);
+        }
+
+        public static void whileEnd()
+        {
+            int b = brstack.Pop();
+            buffer += "br label %cond" + b + "\n";
+            buffer += "false" + b + ":\n";
+        }
+
+        public static void functionStart(string id, string type)
+        {
+            mainText += buffer;
+            mainTmpStack.Push(reg);
+            buffer = "define " + type + " @" + id + "(";
+            reg = 1;
+        }
+
+        public static void functionParams(List<FunctionParameter> parameters)
+        {
+            for (int i = 0; i < parameters.Count; i++)
+            {
+                if (i > 0)
+                {
+                    buffer += ", ";
+                }
+                var type = parameters[i].Type;
+                var id = parameters[i].Identifier;
+                buffer += type + "* %" + id;
+            }
+            
+            buffer += ") nounwind {\n";
+        }
 
 
+        public static void functionEnd(string type)
+        {
+            buffer += "ret " + type + " %" + (reg - 1) + "\n";
+            buffer += "}\n";
+            header += buffer;
+            buffer = "";
+            reg = mainTmpStack.Pop();
+        }
 
+        public static int call(string id, string type)
+        {
+            buffer += "%" + reg + " = call " + type + " @" + id + "(";
+            reg++;
+            return reg - 1;
+        }
+
+        //public static void callParam(List<FunctionParameter> parameters)
+        //{
+        //    for (int i = 0; i < parameters.Count; i++)
+        //    {
+        //        if (i > 0)
+        //        {
+        //            buffer += ", ";
+        //        }
+        //        var type = parameters[i].Type;
+        //        var id = parameters[i].Identifier;
+        //        buffer += type + "* " + id;
+        //    }
+
+        //    buffer += ") nounwind {\n";
+        //}
+
+        public static void callparams(string id, string type, bool last)
+        {
+            buffer += type + "* " + id;
+            if (!last)
+            {
+                buffer += ", ";
+            }
+            else
+            {
+                buffer += ")\n";
+            }
+        }
 
         public static void generateLLVMFile()
         {
@@ -192,7 +306,7 @@ namespace JFiK
             result += "@str_bool = private unnamed_addr constant [3 x i8] c\"%d\\00\", align 1\n";
             result += "@str_true = private unnamed_addr constant [5 x i8] c\"true\\00\", align 1\r\n";
             result += "@str_false = private unnamed_addr constant [6 x i8] c\"false\\00\", align 1\n";
-            result += "@str_fmt = private unnamed_addr constant [3 x i8] c\"%s\\00\", align 1\n";
+            result += "@str_fmt = private unnamed_addr constant [4 x i8] c\"%s\n\\00\", align 1\n";
 
             result += header;
             result += "define i32 @main() nounwind{\n";

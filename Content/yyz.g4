@@ -1,25 +1,27 @@
 ﻿grammar yyz;
 
-
-program: line* EOF;
+program: functionDefinition* line* EOF;
 print: IDENTIFIER PRINT_OPERATOR;
 // program: functionDefinition* line* EOF;
 // print: expression PRINT_OPERATOR;
 read: IDENTIFIER READ_OPERATOR;
-line: print | read | assignment ';';
+line: print | read  | assignment | ifStatement | whileBlock | functionCall;
 // line: statement | ifBlock | whileBlock | print | read;
 // statement: (assignment | functionCall) ';';
-// ifBlock: IF '(' expression ')' block;
+ifStatement: IF '(' expression ')' block;
 whileBlock: WHILE '(' expression ')' block;
-// functionDefinition: IDENTIFIER '(' (IDENTIFIER (',' IDENTIFIER)*)? ')' '=' functionBody;
-// functionBody: '{' line* (RETURN expression)? '}';
+functionDefinition: TYPE IDENTIFIER '(' (TYPE IDENTIFIER (',' TYPE IDENTIFIER)*)? ')' '=' functionBody;
+functionBody: '{' line* (RETURN expression)? '}';
+ifBlock: block;
 block: '{' line* '}';
-assignment: GLOBAL? (CONST)? LET IDENTIFIER '=' expression ;
-// functionCall: IDENTIFIER '(' (expression (',' expression)*)? ')';
+// block: '{' (line? NL)* '}';
+assignment: GLOBAL? (CONST)? LET? IDENTIFIER '=' expression ;
+
+functionCall: IDENTIFIER '(' (IDENTIFIER (',' IDENTIFIER)*)? ')';
 expression
     : constant                                              #constantExpression   
     | IDENTIFIER                                            #identifierExpression
-    // | functionCall                                          #functionCallExpression
+    | functionCall                                          #functionCallExpression
     | '(' expression ')'                                    #bracketExpression
     | expression multiplicativeOperation expression         #multiplicativeExpression
     | expression additiveOperation expression               #additiveExpression 
@@ -34,12 +36,13 @@ compareOperation: COMPARE_OPERATOR;
 // booleanOperation: BOOL_OPERATOR;
 // negationOperation: NEGATION_OPERATOR;
 
+TYPE: 'int' | 'double';
 constant: INTEGER | DOUBLE | STRING | BOOL | NULL;
 COMMENT: '//' ~('\r' | '\n')* NL -> skip;
 MULTILINE_COMMENT: '/*' .* '*/';
 NL: '\r'? '\n' | '\r';
-// WS: [ \t\r\n]+ -> skip;
-// IF: 'if';
+WS: [ \t\r\n]+ -> skip;
+IF: 'if';
 // ELSE: 'else';
 WHILE: 'while';
 

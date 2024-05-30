@@ -1,5 +1,6 @@
 ﻿using Antlr4.Runtime.Misc;
 using JFiK.Content;
+using LLVMSharp;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -11,27 +12,46 @@ namespace JFiK
 {
     public class yyzVisitor : yyzBaseVisitor<object?>
     {
-        Dictionary<string, string> variables = new Dictionary<string, string>();
         Stack<(string, string)> stack = new Stack<(string, string)>();
-        Boolean isGlobal;
+        ScopeService ScopeService;
+
+        public yyzVisitor()
+        {
+            ScopeService = new ScopeService();
+            ScopeService.OpenScope();
+        }
 
 
         public override object? VisitAssignment([NotNull] yyzParser.AssignmentContext context)
         {
-            var variableName = context.IDENTIFIER().GetText();
-            Visit(context.expression());
-            var global = context.GLOBAL() != null;
+            var isLet = context.LET() != null;
 
-            if (variables.ContainsKey(variableName))
+            if (isLet)
             {
-                throw new Exception("variable already initialized");
+                var variableName = context.IDENTIFIER().GetText();
+                Visit(context.expression());
+
+                var isGlobal = context.GLOBAL() != null;
+
+                var value = stack.Pop();
+
+                ScopeService.SetVariable(variableName, value.Item1, isGlobal);
+
+                LLVMGenerator.Declare(variableName, value.Item1, isGlobal);
+                LLVMGenerator.Assign(variableName, value.Item2, value.Item1, isGlobal);
+            }
+            else
+            {
+                var variableName = context.IDENTIFIER().GetText();
+                Visit(context.expression());
+
+                var value = stack.Pop();
+
+                var isGlobal = ScopeService.GetVariable(variableName).IsGlobal;
+
+                LLVMGenerator.Assign(variableName, value.Item2, value.Item1, isGlobal);
             }
 
-            var value = stack.Pop();
-
-            variables.Add(variableName, value.Item1);
-            LLVMGenerator.Declare(variableName, value.Item1);
-            LLVMGenerator.Assign(variableName, value.Item2, value.Item1, global);
 
             return null;
         }
@@ -73,20 +93,18 @@ namespace JFiK
         public override object? VisitIdentifierExpression([NotNull] yyzParser.IdentifierExpressionContext context)
         {
             var variableName = context.IDENTIFIER().GetText();
-            if (!variables.ContainsKey(variableName))
-            {
-                throw new Exception("variable not exists");
-            }
 
-            var type = variables[variableName];
+            var variable = ScopeService.GetVariable(variableName);
+            var type = variable.Type;
+            var isGlobal = variable.IsGlobal;
 
             if (type == "i32")
             {
-                stack.Push((type, "%" + LLVMGenerator.loadInt(variableName)));
+                stack.Push((type, isGlobal ? "@" : "%" + LLVMGenerator.loadInt(variableName)));
             }
             else if (type == "double")
             {
-                stack.Push((type, "%" + LLVMGenerator.loadDouble(variableName)));
+                stack.Push((type, isGlobal ? "@" : "%" + LLVMGenerator.loadDouble(variableName)));
             }
             
 
@@ -237,6 +255,21 @@ namespace JFiK
                     case "==":
                         operationText = "eq";
                         break;
+                    case "!=":
+                        operationText = "ne";
+                        break;
+                    case ">":
+                        operationText = "slt";
+                        break;
+                    case "<":
+                        operationText = "sgt";
+                        break;
+                    case "<=":
+                        operationText = "sge";
+                        break;
+                    case ">=":
+                        operationText = "sle";
+                        break;
                     default:
                         throw new NotImplementedException("Operation not found");
                 };
@@ -249,11 +282,113 @@ namespace JFiK
                 {
                     LLVMGenerator.compareVariables(left.Item2, right.Item2, operationText, "double");
                 }
+                else if (left.Item1 == "i1")
+                {
+                    LLVMGenerator.compareVariables(left.Item2, right.Item2, operationText, "i1");
+                }
             }
             else
             {
                 throw new NotImplementedException("Could not compare different types");
             }
+
+            return null;
+        }
+
+        public override object VisitFunctionCall([NotNull] yyzParser.FunctionCallContext context)
+        {
+            var id = context.IDENTIFIER(0).GetText();
+            var fun = ScopeService.GetFunction(id);
+
+            if (fun.Parameters.Count != context.IDENTIFIER().Length - 1)
+            {
+                throw new Exception("expected " + (context.IDENTIFIER().Length - 1)  + "num of parameters");
+            }
+
+            
+
+            var last = false;
+
+            List<(string, string)> arguments = new List<(string, string)>();
+
+            for (var i = 1; i < context.IDENTIFIER().Length; i++)
+            {
+                var param = fun.Parameters[i - 1];
+                var value = ScopeService.GetVariable(context.IDENTIFIER(i).GetText());
+                if (value.Type != param.Type)
+                {
+                    throw new Exception("parameter type not good");
+                }
+                arguments.Add(((value.IsGlobal ? "@" : "%") + context.IDENTIFIER(i).GetText(), value.Type));
+                
+            }
+
+
+            var napale = LLVMGenerator.call(id, fun.Type);
+
+            if (stack.Count > 0)
+            {
+                var type = stack.Pop().Item1;
+                stack.Push((type, "%" + napale));
+            }
+            else
+            {
+                stack.Push((fun.Type, "%" + napale));
+            }
+            
+
+
+            last = false;
+            
+            for (var i = 0; i < arguments.Count; i++)
+            {
+                last = i + 1 == context.IDENTIFIER().Length - 1;
+                LLVMGenerator.callparams(arguments[i].Item1, arguments[i].Item2, last);
+            }
+            
+            return null;
+        }
+
+        public override object? VisitFunctionDefinition([NotNull] yyzParser.FunctionDefinitionContext context)
+        {
+            string id = context.IDENTIFIER(0).GetText();
+            string type = context.TYPE(0).GetText();
+            if (type == "int")
+            {
+                type = "i32";
+            }
+            else if (type == "double")
+            {
+                type = "double";
+            }
+            else
+            {
+                throw new Exception("unsupported return parameter");
+            }
+
+            List<FunctionParameter> args = new List<FunctionParameter>();
+            foreach (var item in context.IDENTIFIER().Skip(1).Select((value, i) => (value, i)))
+            {
+                var newType = context.TYPE(item.i).GetText() == "int" ? "i32" : "double";
+                args.Add(new FunctionParameter { Identifier = item.value.GetText(), Type = newType});
+            }
+
+            ScopeService.SetFunction(new Function { Identifier = id, Type = type, Parameters = args });
+            LLVMGenerator.functionStart(id, type);
+            LLVMGenerator.functionParams(args);
+
+            ScopeService.OpenScope();
+            args.ForEach(item =>
+            {
+                ScopeService.SetVariable(item.Identifier, item.Type);
+            });
+
+            Visit(context.functionBody());
+
+            LLVMGenerator.functionEnd(type);
+
+            ScopeService.CloseScope();
+
 
             return null;
         }
@@ -324,31 +459,60 @@ namespace JFiK
         //}
         #endregion
         #region block
-        //public override object? VisitBlock([NotNull] yyzParser.BlockContext context)
-        //{
-        //    GetScopeService().OpenScope();
-        //    base.VisitBlock(context);
-        //    GetScopeService().CloseScope();
-        //    return null;
-        //}
-
-        //public override object? VisitIfBlock([NotNull] yyzParser.IfBlockContext context)
-        //{
-        //    if (IsTrue(Visit(context.expression())))
-        //    {
-        //        Visit(context.block());
-        //    }
-        //    return null;
-        //}
+        public override object? VisitBlock([NotNull] yyzParser.BlockContext context)
+        {
+            ScopeService.OpenScope();
+            var lines = context.line();
+            base.VisitBlock(context);
+            //foreach (var l in lines)
+            //{
+            //    Visit(l);
+            //}
+            ScopeService.CloseScope();
+            return null;
+        }
 
         public override object? VisitWhileBlock([NotNull] yyzParser.WhileBlockContext context)
         {
-            //while (IsTrue(Visit(context.expression())))
-            //{
-            //    Visit(context.block());
-            //}
+            LLVMGenerator.beginWhile();
+            Visit(context.expression());
+            LLVMGenerator.whileBlock();
+            Visit(context.block());
+            LLVMGenerator.whileEnd();
             return null;
         }
+
+
+        public override object? VisitIfStatement([NotNull] yyzParser.IfStatementContext context)
+        {
+            Visit(context.expression());
+            LLVMGenerator.beginIfStatement();
+            Visit(context.block());
+            LLVMGenerator.beginElseStatement();
+            LLVMGenerator.endElse();
+            return null;
+        }
+
+
+        //public override object? VisitIfStatement([NotNull] yyzParser.IfBlockContext context)
+        //{
+            
+        //    isGlobal = false;
+            
+
+
+            
+            
+        //}
+
+        //public override object? VisitWhileBlock([NotNull] yyzParser.WhileBlockContext context)
+        //{
+        //    //while (IsTrue(Visit(context.expression())))
+        //    //{
+        //    //    Visit(context.block());
+        //    //}
+        //    return null;
+        //}
         #endregion
         #region functions
         //public override object? VisitFunctionDefinition([NotNull] yyzParser.FunctionDefinitionContext context)
@@ -389,8 +553,6 @@ namespace JFiK
 
         public override object? VisitProgram([NotNull] yyzParser.ProgramContext context)
         {
-            isGlobal = true;
-
             base.VisitProgram(context);
 
             LLVMGenerator.CloseMain();
@@ -417,23 +579,21 @@ namespace JFiK
         {
             var id = context.IDENTIFIER().GetText();
 
-            if (!variables.ContainsKey(id))
-            {
-                throw new Exception("Variable not initialized");
-            }
-            var type = variables[id];
+            var variable = ScopeService.GetVariable(id);
+            var type = variable.Type;
+            var isGlobal = variable.IsGlobal;
 
             if (type == "i32")
             {
-                LLVMGenerator.PrintInteger(id);
+                LLVMGenerator.PrintInteger((isGlobal ? "@" : "%") + id);
             }
             else if (type == "double")
             {
-                LLVMGenerator.PrintDouble(id);
+                LLVMGenerator.PrintDouble((isGlobal ? "@" : "%") + id);
             }
             else if (type == "i1")
             {
-                LLVMGenerator.PrintBoolean(id);
+                LLVMGenerator.PrintBoolean((isGlobal ? "@" : "%") + id);
             }
 
             return null;
@@ -443,28 +603,27 @@ namespace JFiK
         {
 
             var id = context.IDENTIFIER().GetText();
-            if (!variables.ContainsKey(id))
-            {
-                throw new Exception("Variable not initialized");
-            }
 
-            var type = variables[id];
+            var variable = ScopeService.GetVariable(id);
+            var type = variable.Type;
+            var isGlobal = variable.IsGlobal;
 
             if (type == "i32")
             {
-                LLVMGenerator.ScanInteger(id);
+                LLVMGenerator.ScanInteger((isGlobal ? "@" : "%") + id);
             }
             else if (type == "double")
             {
-                LLVMGenerator.ScanDouble(id);
+                LLVMGenerator.ScanDouble((isGlobal ? "@" : "%") + id);
             }
             else if (type == "i1")
             {
-                LLVMGenerator.ScanBoolean(id);
+                LLVMGenerator.ScanBoolean((isGlobal ? "@" : "%") + id);
             }
 
             return null;
         }
         #endregion
+
     }
 }

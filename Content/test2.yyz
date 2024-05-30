@@ -1,3 +1,40 @@
-let x = false;
+int fibonacii(int n) =
+{
+	let result = 0
+	if (n <= 1)
+	{
+		result = n
+	}
 
-//x >>;
+	if (n > 1)
+	{
+		let newN = n - 1
+		let newN2 = n - 2
+		let fib1 = fibonacii(newN)
+		let fib2 = fibonacii(newN2)
+		result = fib1 + fib2
+	}
+
+	return result
+}
+
+
+int silnia(int n) = 
+{
+	let res = 1
+	while(n > 1)
+	{
+		res = res * n	
+		n = n - 1
+	}
+	return res
+}
+
+
+
+let y = 4
+let z = silnia(y)
+let fibo = 4
+let x = fibonacii(fibo)
+z >>
+x >>
